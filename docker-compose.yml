@@ -1,17 +1,37 @@
 version: "3.6"
 services:
 
+  caddy:
+    build:
+      context: .
+      dockerfile: caddy/Dockerfile
+    image: openindoor-caddy
+    restart: unless-stopped
+    ports:
+      - "9092:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./site:/srv
+      - caddy_data:/data
+      - caddy_config:/config
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile --watch
+
   autocad-to-gis:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile_debian
     image: openindoor/autocad-to-gis
     cpus: 1
     restart: unless-stopped
     working_dir: /openindoor
     volumes:
     - ./data:/data
+    - ./log:/openindoor/log
     - ./autocad-to-gis.py:/openindoor/autocad-to-gis.py
-    - ./autocad-to-gis.sh:/openindoor/autocad-to-gis.sh
+    - ./autocad-to-ascii_dxf.sh:/openindoor/autocad-to-ascii_dxf.sh
     - ./requirements.txt:/openindoor/requirements.txt
     command: /openindoor/autocad-to-gis.py
-    ports:
-      - "9092:5000"
+
+volumes:
+  caddy_data:
+  caddy_config:

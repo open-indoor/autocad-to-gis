@@ -1,0 +1,69 @@
+.coordinates {
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    position: absolute;
+    bottom: 40px;
+    left: 10px;
+    padding: 5px 10px;
+    margin: 0;
+    font-size: 11px;
+    line-height: 18px;
+    border-radius: 3px;
+    display: none;
+}
+
+.icon-bar {
+    width: 52px;
+    background-color: #555;
+    position: relative;
+    z-index: 1
+}
+
+.icon-bar label,
+a {
+    display: block;
+    text-align: center;
+    padding: 8px;
+    transition: all 0.3s ease;
+    color: white;
+    font-size: 18px;
+}
+
+.icon-bar a:hover,
+label:hover {
+    background-color: #04AA6D;
+}
+
+.spinner,
+.dropend {
+    position: relative;
+    z-index: 1
+}
+
+/* .active {
+            background-color: #04AA6D;
+        } */
+
+/* input[type="file"] {
+            display: none;
+        } */
+/* #file-geo-upload {
+            position: absolute;
+            top: 0;
+            left: 0;
+        } */
+
+.form-label {
+    position: relative;
+    z-index: 1;
+}
+
+
+/* .bi::before {
+            display: inline-block;
+            content: "";
+            vertical-align: -.125em;
+            background-image: url("data:image/svg+xml,<svg viewBox='0 0 16 16' fill='%23333' xmlns='http://www.w3.org/2000/svg'><path fill-rule='evenodd' d='M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z' clip-rule='evenodd'/></svg>");
+            background-repeat: no-repeat;
+            background-size: 1rem 1rem;
+        } */

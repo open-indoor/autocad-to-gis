@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import logging
 import fiona
 import geopandas
 import json
@@ -13,6 +14,10 @@ import uuid
 from flask import Flask, flash, request, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
 
+logger = logging.getLogger('autocad-to-gis')
+logger.setLevel(logging.DEBUG)
+logging.basicConfig(filename='log/autocad-to-gis.log', filemode='w')
+# logger.info('start logger')
 
 # #!/bin/bash
 
@@ -54,29 +59,24 @@ def allowed_file(filename):
 # curl -F "file=@autocad-to-gis/data/kingconf/sett_22-11_14.dxf" \
 #     https://autocad-to-geojson.openindoor.io/api/autocad-to-gis/convert/-0.8782/47.0545/0.0/0.0/45.0/0.5
 @app.route('/api/autocad-to-gis/convert/<float(signed=True):lng>/<float(signed=True):lat>/<float(signed=True):xoff>/<float(signed=True):yoff>/<float(signed=True):rot>/<float(signed=True):scale>', methods=['POST'])
-def convert_all(lng, lat, xoff, yoff, rot, scale):
-    return convert_(lng, lat, xoff, yoff, rot, scale)
-
-# curl -F "file=@autocad-to-gis/data/kingconf/sett_22-11_14.dxf" \
-#     http://localhost:9092/api/autocad-to-gis/convert/2.0/45.0
-# autocad-to-geojson.openindoor.io
-# curl -F "file=@autocad-to-gis/data/kingconf/sett_22-11_14.dxf"     https://autocad-to-geojson.openindoor.io/api/autocad-to-gis/convert/-0.8782/47.0545 > autocad-to-gis/data/kingconf/sett_22-11_14.geojson
 @app.route('/api/autocad-to-gis/convert/<float(signed=True):lng>/<float(signed=True):lat>', methods=['POST'])
-def convert(lng, lat):
-    return convert_(lng, lat)
-
-def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
+def convert_all(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
     # Get data as a file
     if 'file' not in request.files:
+        logger.error('No input file')
         flash('No file part')
         return app.response_class(status=400)
     file = request.files['file']
-    print('file.filename:', file.filename, file=sys.stderr)
+
+    # logging.info('file.filename:', file.filename)
     if file.filename == '':
         flash('No selected file')
         return app.response_class(status=400)
     if not (file and allowed_file(file.filename)):
         return app.response_class(status=400)
+
+    print('file.filename:', file.filename, file=sys.stderr, flush=True)
+    logger.info('file.filename: %s', file.filename)
 
     filename = secure_filename(file.filename)
     file_base = os.path.splitext(filename)[0]
@@ -93,6 +93,8 @@ def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
         autocad_folder,
         filename
     )
+    logger.debug('Original file: %s', autocad_path)
+
     # ASCII DXF
     ascii_dxf_folder = os.path.join(
         app.config['UPLOAD_FOLDER'],
@@ -104,6 +106,7 @@ def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
         ascii_dxf_folder,
         file_base + ".dxf"
     )
+    logger.debug('DXF ASCII file: %s', ascii_dxf_path)
 
     # geojson file
     geojson_folder = os.path.join(
@@ -116,18 +119,19 @@ def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
         geojson_folder,
         file_base + ".geojson"
     )
-
+    logger.debug('Geojson to write: %s', geojson_path)
 
     file.save(autocad_path)
     
     # Convert Autocad data to ASCII DXF
-    print('autocad_path:', autocad_path, file=sys.stderr)
+    print('autocad_path:', autocad_path, file=sys.stderr, flush=True)
     cmd = [
-        "/openindoor/autocad-to-gis.sh",
+        "/openindoor/autocad-to-ascii_dxf.sh",
         autocad_folder,
         ascii_dxf_folder,
     ]
-    print(cmd, file=sys.stderr)
+    print(cmd, file=sys.stderr, flush=True)
+    logger.info('cmd: %s', cmd)
     result = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
@@ -143,7 +147,6 @@ def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
         #     "DISPLAY": ":99.0",
         # }
     # )
-    print(result.stdout, file=sys.stderr)
 
     ogrinfo = subprocess.run(
         [
@@ -153,11 +156,12 @@ def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
         ],
         stdout = subprocess.PIPE
     )
-    print('ogrinfo:', ogrinfo, file=sys.stderr)
+    print('ogrinfo:', ogrinfo, file=sys.stderr, flush=True)
+    logger.info('ogrinfo: %s', ogrinfo)
 
     # print(result.stderr, file=sys.stderr)
     if (result.returncode != 0):
-        print("returncode:", result.returncode, file=sys.stderr)
+        print("returncode:", result.returncode, file=sys.stderr, flush=True)
         return app.response_class(
             response=json.dumps(
                 {"returncode": result.returncode}
@@ -169,7 +173,7 @@ def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
 
     # Convert ASCII DXF file to geojson
 
-    lambert_93 = "EPSG:27561"
+    # lambert_93 = "EPSG:27561"
 # https://gdal.org/drivers/vector/dxf.html
 # GDAL writes DXF files with measurement units set to “Imperial - Inches”. If you need to change the units, edit the $MEASUREMENT and $INSUNITS variables in the header template.
     crs = "+proj=lcc" \
@@ -202,6 +206,7 @@ def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
             inplace = True
         )
         print('ascii_dxf.crs:', ascii_dxf.crs, file=sys.stderr)
+        logger.info('Applied crs: %s', ascii_dxf.crs)
 
         # total_bounds = ascii_dxf.total_bounds
         # print('total_bounds:', total_bounds, file=sys.stderr)
@@ -254,6 +259,7 @@ def convert_(lng, lat, xoff = 0, yoff = 0, rot = 0, scale = 1):
         my_geojson = my_epsg.to_json()
 
         print('geojson_path:', geojson_path, file=sys.stderr)
+        logger.info('geojson generated here: %s', geojson_path)
         my_epsg.to_file(geojson_path, driver='GeoJSON')  
 
         # print("geojson:", my_geojson, file=sys.stderr)
@@ -309,35 +315,20 @@ def dwg_to_dxf(file_id):
 #     /tmp/dwg_8fa47945beae4b56af301f0b9e0a3dcf \
 #     /tmp/dwg_8fa47945beae4b56af301f0b9e0a3dcf \
 #     ACAD2018 DXF 1 1 "*.dwg"
-    print(
-        'ODAFileConverter...',
-        # os.path.join(
-        #     app.config['UPLOAD_FOLDER'],
-        #     dest_file,
-        # ),
-        file=sys.stderr
-    )
     cmd = [
         "ODAFileConverter",
         dest_dir,
         dest_dir,
         "ACAD2018", "DXF", "1", "1", '"*.dwg"'
     ]
+    logger.info('cmd: %s', cmd)
+
     cmd = ["env"]
     subprocess.run(
-    # subprocess.Popen(
         cmd,
         shell=True,
-        # check=True,
         capture_output=True,
         text=True,
-        # stdout=subprocess.PIPE,
-        # stderr=subprocess.PIPE,
-        # env={
-        #     "DXF_ENCODING": "UTF-8",
-        #     "XDG_RUNTIME_DIR": "/tmp/runtime-root",
-        #     "DISPLAY": ":99.0",
-        # }
     )
 
     response = app.response_class(
