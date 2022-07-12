@@ -1,0 +1,17 @@
+version: "3.6"
+services:
+
+  autocad-to-gis:
+    build: .
+    image: openindoor/autocad-to-gis
+    cpus: 1
+    restart: unless-stopped
+    working_dir: /openindoor
+    volumes:
+    - ./data:/data
+    - ./autocad-to-gis.py:/openindoor/autocad-to-gis.py
+    - ./autocad-to-gis.sh:/openindoor/autocad-to-gis.sh
+    - ./requirements.txt:/openindoor/requirements.txt
+    command: /openindoor/autocad-to-gis.py
+    ports:
+      - "9092:5000"
