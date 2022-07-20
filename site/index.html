@@ -31,7 +31,7 @@
             top: 0;
             bottom: 0;
             width: 100%;
-            z-index: -1
+            z-index: 0
         }
     </style>
 </head>
@@ -64,7 +64,7 @@
         </button>
         <ul class="dropdown-menu bg-dark" style="min-width: 0px;  padding: 0px 0px; width: 250px;">
             <li>
-                <label class="dropdown-item" style="padding: 0.5rem 0.5rem;">
+                <label id='import-cad' class="dropdown-item" style="padding: 0.5rem 0.5rem;">
                     <img src="img/dwg.svg" width="36" height="36" style="float: left; "><a
                         style="color: white;">&nbsp;-&nbsp;Import AutoCAD file...</a>
                     <input type="file" id="file-cad-upload" accept="application/acad,application/dxf,.dxf,.dwg"
@@ -72,7 +72,7 @@
                 </label>
             </li>
             <li>
-                <label class="dropdown-item" style="padding: 0.5rem 0.5rem;">
+                <label id='upload-geojson' class="dropdown-item" style="padding: 0.5rem 0.5rem;">
                     <img src="img/geojson-file.svg" width="36" height="36" style="float: left; "><a
                         style="color: white;">&nbsp;-&nbsp;Open GeoJSON file...</a>
                     <input type="file" id="file-geo-upload"
@@ -80,7 +80,8 @@
                 </label>
             </li>
             <li>
-                <label class="dropdown-item disabled" style="padding: 0.5rem 0.5rem;" onclick="onDownload()">
+                <label id='download-geojson' class="dropdown-item disabled" style="padding: 0.5rem 0.5rem;"
+                    onclick="onDownload()">
                     <img src="img/cloud-arrow-down.svg" width="36" height="36" style="float: left; ">
                     <a style="color: white;" type="application/geo+json" download>&nbsp;-&nbsp;Save as GeoJSON</a>
                 </label>
@@ -96,7 +97,7 @@
         </button>
         <ul class="dropdown-menu bg-dark" style="min-width: 0px; padding: 0px 0px; width: 250px;">
             <li>
-                <label class="dropdown-item disabled" style="padding: 0.5rem 0.5rem;">
+                <label id="locate-plan" class="dropdown-item active" style="padding: 0.5rem 0.5rem;">
                     <img src="img/geo-fill.svg" width="36" height="36" style="float: left; ">
                     <a style="color: white;">&nbsp;-&nbsp;Move whole plan</a>
                 </label>
@@ -121,7 +122,8 @@
     <!-- <div class="spinner-border text-success" role="status" style="z-index: 2">
         &nbsp;&nbsp;Loading...
     </div> -->
-    <div id="spinner" class="d-flex justify-content-center spinner" style="display: none;visibility: hidden;">
+    <!-- <div id="spinner" class="d-flex justify-content-center spinner" style="display: none;visibility: hidden;"> -->
+    <div id="spinner" class="spinner" style="display: none;visibility: hidden;">
         <button class="btn btn-primary" type="button" disabled>
             <span class="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
             Loading CAD file...
@@ -163,22 +165,32 @@
     <!-- <input type="file" id="file" name="file" accept="application/geo+json,application/vnd.geo+json,.geojson" /> -->
     <!-- <input type="file" id="file-upload" name="file" accept="application/acad,application/dxf,.dxf,.dwg" /> -->
     <script>
+        const EMPTY_GEOJSON = {
+            "type": "FeatureCollection",
+            "features": []
+        };
+        let isMoving = false;
+        let layers = {};
         let spinner = document.getElementById("spinner");
         let geoFileName = 'cad2gis.geojson'
         let cadFileName = 'cad2gis.dwg'
         let initPos = undefined;
         let initDistance = undefined;
+        let initBearingPoint = undefined;
         let bboxDistance = undefined;
         let newPos = undefined;
-        let shiftPos = { lng: 0, lat: 0 };
+        let shiftPos = {
+            pos: { lng: 0, lat: 0 },
+            initPos: { lng: 0, lat: 0 }
+        };
         let shiftBearing = 0;
         let shiftScale = 1.0;
         let scalingPoint = undefined;
+        let bearingPoint = undefined;
         let plan = undefined;
-        let shiftPlan = {
-            "type": "FeatureCollection",
-            "features": []
-        };
+        let shiftPlan = getEmptyGeojson()
+        let nearest = getEmptyGeojson();
+
         // let translatedRotatedPlan = undefined;
         let bboxPlan = undefined;
         let shiftBboxPlan = undefined;
@@ -196,6 +208,7 @@
                 "name": "Raster tiles",
                 "center": [0, 0],
                 "zoom": 0,
+                "glyphs": "https://openmaptiles.openindoor.io/fonts/{fontstack}/{range}.pbf",
                 "sources": {
                     "raster-tiles": {
                         "type": "raster",
@@ -247,7 +260,20 @@
         // scale.setUnit('metric');
 
 
+        function getEmptyGeojson() {
+            return turf.clone(EMPTY_GEOJSON);
+        }
         function initData(plan_) {
+            let importCad = document.getElementById('import-cad');
+            importCad.classList.add("disabled");
+            let upoadGeojson = document.getElementById('upload-geojson');
+            upoadGeojson.classList.add("disabled");
+            let downloadButton = document.getElementById('download-geojson');
+            downloadButton.classList.remove("disabled");
+            // let locatePlanButton = document.getElementById('locate-plan');
+            // locatePlanButton.classList.remove("disabled");
+            // locatePlanButton.classList.add("active");
+
             plan = plan_;
 
             let turf_bbox = turf.bbox(plan);
@@ -337,6 +363,32 @@
                 }
             });
 
+            map.addSource('nearest', {
+                'type': 'geojson',
+                'data': EMPTY_GEOJSON
+            });
+            map.addLayer({
+                'id': 'nearest',
+                'type': 'circle',
+                'source': 'nearest',
+                'paint': {
+                    'circle-radius': 10,
+                    'circle-color': '#0F0'
+                }
+            });
+            map.addSource('fix-point', {
+                'type': 'geojson',
+                'data': EMPTY_GEOJSON
+            });
+            map.addLayer({
+                'id': 'fix-point',
+                'type': 'circle',
+                'source': 'fix-point',
+                'paint': {
+                    'circle-radius': 10,
+                    'circle-color': '#F00'
+                }
+            });
             // When the cursor enters a feature in the point layer, prepare for dragging.
             map.on('mouseenter', 'point', function () {
                 map.setPaintProperty('point', 'circle-color', '#3bb2d0');
@@ -368,19 +420,55 @@
                 map.once('touchend', onMoveUpPoint);
             });
 
+            map.on('mousedown', 'nearest', function (e) {
+                // Prevent the default map drag behavior.
+                e.preventDefault();
+
+                canvas.style.cursor = 'grab';
+                currentLayerID = 'nearest';
+
+                map.on('mousemove', onMove);
+                map.once('mouseup', onMoveUp);
+            });
+
+            map.on('touchstart', 'nearest', function (e) {
+                if (e.points.length !== 1) return;
+
+                // Prevent the default map drag behavior.
+                e.preventDefault();
+
+                map.on('touchmove', onMove);
+                map.once('touchend', onMoveUp);
+            });
+
             // Add Layer list
             plan.features.forEach(function (feature) {
                 let layerID = feature.properties['Layer'];
+
                 if (layerID === 'oid_bbox') {
                     return;
                 }
                 // var layerID = layer;
 
                 // Add a layer for this symbol type if it hasn't been added already.
-                if (!map.getLayer(layerID)) {
+                if (layers[layerID] == null) {
+                    layers[layerID] = {
+                        'polygon': {
+                            colorType: 'fill-color',
+                            interactive: true
+                        },
+                        'linestring': {
+                            colorType: 'line-color',
+                            interactive: true
+                        },
+                        'text': {
+                            colorType: 'text-color',
+                            interactive: false
+                        }
+                    }
 
                     map.addLayer({
-                        'id': layerID,
+                        'id': layerID + '-polygon',
                         'type': 'fill',
                         'source': 'uploaded-source',
                         'paint': {
@@ -391,6 +479,35 @@
                         'filter': [
                             "all",
                             ['==', '$type', 'Polygon'],
+                            ['==', 'Layer', layerID]
+                        ]
+                    });
+
+                    map.addLayer({
+                        'id': layerID + '-linestring',
+                        'type': 'line',
+                        'source': 'uploaded-source',
+                        'paint': {
+                            'line-color': '#888888',
+                        },
+                        'filter': [
+                            "all",
+                            ['==', '$type', 'LineString'],
+                            ['==', 'Layer', layerID]
+                        ]
+                    });
+                    map.addLayer({
+                        'id': layerID + '-text',
+                        'type': 'symbol',
+                        'source': 'uploaded-source',
+                        'paint': {
+                            'text-color': '#888888',
+                        },
+                        'layout': {
+                            'text-field': ["id"]
+                        },
+                        'filter': [
+                            "all",
                             ['==', 'Layer', layerID]
                         ]
                     });
@@ -409,57 +526,85 @@
 
                     // When the checkbox changes, update the visibility of the layer.
                     input.addEventListener('change', function (e) {
-                        map.setLayoutProperty(
-                            layerID,
-                            'visibility',
-                            e.target.checked ? 'visible' : 'none'
-                        );
-                    });
-
-                    map.on('mouseenter', layerID, function () {
-                        // map.setPaintProperty('point', 'circle-color', '#3bb2d0');
-                        canvas.style.cursor = 'move';
-                        map.setPaintProperty(layerID, 'fill-color', '#00F')
-                    });
-
-                    map.on('mouseleave', layerID, function () {
-                        // map.setPaintProperty('point', 'circle-color', '#3887be');
-                        canvas.style.cursor = '';
-                        map.setPaintProperty(layerID, 'fill-color', '#888888')
-
-                    });
-
-                    map.on('rotatestart', function (e) {
-                        if (map.dragRotate.isActive() || map.touchZoomRotate.isActive()) {
-                            console.log('rotatestart');
-                            map.on('rotate', onRotate);
-                            map.once('rotateend', onRotateEnd);
+                        for (let subLayer of Object.keys(layers[layerID])) {
+                            let layerId_ = layerID + '-' + subLayer;
+                            map.setLayoutProperty(
+                                layerId_,
+                                'visibility',
+                                e.target.checked ? 'visible' : 'none'
+                            );
                         }
                     });
+                    console.log('layers[layerID].keys():', Object.keys(layers[layerID]));
 
-                    map.on('mousedown', layerID, function (e) {
-                        currentLayerID = layerID;
-                        // onMoveUp_ = (e) => onMoveUp(e, layerID);
-                        // Prevent the default map drag behavior.
-                        e.preventDefault();
+                    for (let subLayer of Object.keys(layers[layerID])) {
+                        if (!layers[layerID][subLayer].interactive)
+                            continue;
+                        let layerId_ = layerID + '-' + subLayer;
+                        map.on('mouseenter', layerId_, function (e) {
+                            canvas.style.cursor = 'move';
+                            map.setPaintProperty(layerId_, layers[layerID][subLayer].colorType, '#00F')
 
-                        canvas.style.cursor = 'grab';
+                            if (!isMoving) {
+                                let features_ = map.queryRenderedFeatures(e.point, {
+                                    layers: [layerId_]
+                                });
+                                let points = turf.explode(features_[0]);
+                                let targetPoint = turf.point([e.lngLat.lng, e.lngLat.lat]);
+                                nearest = turf.nearestPoint(targetPoint, points);
+                                map.getSource('nearest').setData(nearest);
+                            }
+                        });
 
-                        map.on('mousemove', onMove);
-                        map.once('mouseup', onMoveUp);
-                    });
+                        map.on('mouseleave', layerId_, function () {
+                            canvas.style.cursor = '';
+                            map.setPaintProperty(layerId_, layers[layerID][subLayer].colorType, '#888888');
+                            // map.getSource('nearest').setData(EMPTY_GEOJSON);
+                        });
+                        // map.on('click', layerId_, function (e) {
+                        //     e.preventDefault();
+                        //     let features_ = map.queryRenderedFeatures(e.point, {
+                        //         layers: [layerId_]
+                        //     });
+                        //     let points = turf.explode(features_[0]);
+                        //     let targetPoint = turf.point([e.lngLat.lng, e.lngLat.lat]);
+                        //     let fixPoint = turf.nearestPoint(targetPoint, points);
+                        //     map.getSource('fix-point').setData(fixPoint);
 
-                    map.on('touchstart', layerID, function (e) {
-                        currentLayerID = layerID;
-                        // onMoveUp_ = (e) => onMoveUp(e, layerID);
-                        if (e.points.length !== 1) return;
+                        // })
+                        map.on('mousedown', layerId_, function (e) {
+                            currentLayerID = layerID;
+                            // onMoveUp_ = (e) => onMoveUp(e, layerID);
+                            // Prevent the default map drag behavior.
+                            e.preventDefault();
 
-                        // Prevent the default map drag behavior.
-                        e.preventDefault();
+                            canvas.style.cursor = 'grab';
 
-                        map.on('touchmove', onMove);
-                        map.once('touchend', onMoveUp);
-                    });
+                            map.on('mousemove', onMove);
+                            map.once('mouseup', onMoveUp);
+                        });
+
+                        map.on('touchstart', layerId_, function (e) {
+                            currentLayerID = layerID;
+                            // onMoveUp_ = (e) => onMoveUp(e, layerID);
+                            if (e.points.length !== 1) return;
+
+                            // Prevent the default map drag behavior.
+                            e.preventDefault();
+
+                            map.on('touchmove', onMove);
+                            map.once('touchend', onMoveUp);
+                        });
+                    }
+                    // map.on('rotatestart', function (e) {
+                    //     if (map.dragRotate.isActive() || map.touchZoomRotate.isActive()) {
+                    //         console.log('rotatestart');
+                    //         map.on('rotate', onRotate);
+                    //         map.once('rotateend', onRotateEnd);
+                    //     }
+                    // });
+
+
                 }
             })
         }
@@ -484,6 +629,7 @@
 
             spinner.style.display = "block";
             spinner.style.visibility = "visible";
+            // spinner.style.width = "10px";
             fetch("/api/autocad-to-gis/convert/" + lng + "/" + lat, {
                 method: "POST",
                 body: data
@@ -498,6 +644,7 @@
                 .finally(function () {
                     spinner.style.display = "none";
                     spinner.style.visibility = "hidden";
+                    // spinner.style.width = "10px";
                 });
             ;
             // }
@@ -558,16 +705,20 @@
                 'Shift:<ul>' +
                 '<li>Rotation: ' + (shiftBearing_) + '</li>' +
                 '<li>Scale: ' + (shiftScale_) + '</li>' +
-                '<li>Longitude: ' + (shiftPos_.lng) + '</li>' +
-                '<li>Latitude: ' + (shiftPos_.lat) + '</li></ul>';
+                '<li>Longitude: ' + (shiftPos_.pos.lng - shiftPos_.initPos.lng) + '</li>' +
+                '<li>Latitude: ' + (shiftPos_.pos.lat - shiftPos_.initPos.lat) + '</li>' +
+                '</ul>';
             canvas.style.cursor = '';
         }
 
         function updateShift() {
+            console.log('updateShift !');
+            console.log('shiftPos:', shiftPos);
             // Translation
-            let { distance, bearing } = DIST_BEAR({ lng: 0, lat: 0 }, shiftPos);
+            let { distance, bearing } = DIST_BEAR(shiftPos.initPos, shiftPos.pos);
             let translatedPlan = turf.transformTranslate(plan, distance, bearing)
             let translatedBboxPlan = turf.transformTranslate(bboxPlan, distance, bearing)
+
             // Rotation
             let center_ = turf.getCoord(turf.center(translatedPlan));
             let rotatedPlan = turf.transformRotate(translatedPlan, shiftBearing, { pivot: center_ })
@@ -581,34 +732,39 @@
             map.getSource('uploaded-source').setData(shiftPlan);
             map.getSource('oid-bbox').setData(shiftBboxPlan);
             map.getSource('point').setData(scalingPoint);
+
         }
 
-        function onRotate(e) {
-            if (map.dragRotate.isActive() || map.touchZoomRotate.isActive()) {
-                console.log('onRotate');
-                let center_ = turf.center(shiftPlan);
-                map.getSource('uploaded-source').setData(turf.transformRotate(shiftPlan, map.getBearing(), { pivot: center_.geometry.coordinates }));
-                map.getSource('oid-bbox').setData(turf.transformRotate(shiftBboxPlan, map.getBearing(), { pivot: center_.geometry.coordinates }));
-            }
-        }
+        // function onRotate(e) {
+        //     isMoving = true;
+        //     if (map.dragRotate.isActive() || map.touchZoomRotate.isActive()) {
+        //         console.log('onRotate');
+        //         let center_ = turf.center(shiftPlan);
+        //         map.getSource('uploaded-source').setData(turf.transformRotate(shiftPlan, map.getBearing(), { pivot: center_.geometry.coordinates }));
+        //         map.getSource('oid-bbox').setData(turf.transformRotate(shiftBboxPlan, map.getBearing(), { pivot: center_.geometry.coordinates }));
+        //     }
+        // }
 
-        function onRotateEnd(e) {
-            console.log('onRotateEnd');
-            shiftBearing = shiftBearing + map.getBearing();
-            updateShift();
+        // function onRotateEnd(e) {
+        //     console.log('onRotateEnd');
+        //     shiftBearing = shiftBearing + map.getBearing();
+        //     updateShift();
 
-            map.flyTo({
-                center: map.getCenter(),
-                zoom: map.getZoom(),
-                pitch: 0,
-                bearing: 0,
-                speed: 5.0
-            });
+        //     map.flyTo({
+        //         center: map.getCenter(),
+        //         zoom: map.getZoom(),
+        //         pitch: 0,
+        //         bearing: 0,
+        //         speed: 5.0
+        //     });
 
-            displayShift(shiftBearing, shiftScale, shiftPos)
-        }
+        //     displayShift(shiftBearing, shiftScale, shiftPos)
+        //     isMoving = false;
+        // }
 
         function onMove(e) {
+            isMoving = true;
+
             if (initPos == null) {
                 initPos = e.lngLat;
                 console.log('onMove', currentLayerID, 'initPos:', initPos);
@@ -618,30 +774,37 @@
             // Set a UI indicator for dragging.
             canvas.style.cursor = 'grabbing';
 
-            let pos = {
-                lng: newPos.lng - initPos.lng,
-                lat: newPos.lat - initPos.lat
-            }
-            let { distance, bearing } = DIST_BEAR({ lng: 0, lat: 0 }, pos);
+            // let pos = {
+            //     lng: newPos.lng - initPos.lng,
+            //     lat: newPos.lat - initPos.lat
+            // }
+            // let { distance, bearing } = DIST_BEAR({ lng: 0, lat: 0 }, pos);
+            let { distance, bearing } = DIST_BEAR(initPos, newPos);
 
-            let layerData = {
-                "type": "FeatureCollection",
-                "features": []
-            }
+            let layerData = getEmptyGeojson();
             layerData.features = shiftPlan.features.filter((feature) => {
                 return feature.properties.Layer === currentLayerID
             });
             map.getSource('uploaded-source').setData(turf.transformTranslate(layerData, distance, bearing));
             map.getSource('oid-bbox').setData(turf.transformTranslate(shiftBboxPlan, distance, bearing));
-
+            // nearest = turf.point([newPos.lng, newPos.lat]);
+            map.getSource('nearest').setData(turf.transformTranslate(nearest, distance, bearing));
         }
 
         function onMoveUp(e) {
             currentLayerID = null;
             if (initPos != null) {
+                // shiftPos = {
+                //     lng: shiftPos.lng + newPos.lng - initPos.lng,
+                //     lat: shiftPos.lat + newPos.lat - initPos.lat
+                // }
+
                 shiftPos = {
-                    lng: shiftPos.lng + newPos.lng - initPos.lng,
-                    lat: shiftPos.lat + newPos.lat - initPos.lat
+                    pos: {
+                        lng: (shiftPos.pos.lng - shiftPos.initPos.lng) + newPos.lng,
+                        lat: (shiftPos.pos.lat - shiftPos.initPos.lat) + newPos.lat
+                    },
+                    initPos: initPos
                 }
                 updateShift()
                 initPos = null;
@@ -652,28 +815,37 @@
             // Unbind mouse/touch events
             map.off('mousemove', onMove);
             map.off('touchmove', onMove);
+            isMoving = false;
         }
 
         function onMovePoint(e) {
+            isMoving = true;
             // Set a UI indicator for dragging.
             canvas.style.cursor = 'grabbing';
 
             var coords = e.lngLat;
             scalingPoint.features[0].geometry.coordinates = [coords.lng, coords.lat];
-            if (initDistance == null) {
-                let center_ = turf.center(shiftPlan);
-                let point_ = scalingPoint.features[0];
-                initDistance = turf.distance(center_, point_);
-            }
-
             let center_ = turf.center(shiftPlan);
             let point_ = scalingPoint.features[0];
             let distance_ = turf.distance(center_, point_);
+            if (initDistance == null) {
+                initDistance = distance_;
+            }
+            if (initBearingPoint == null) {
+                initBearingPoint = turf.bearing(center_, point_);
+            }
+
+            let bearingPoint_ = turf.bearing(center_, point_)
+            bearingPoint = bearingPoint_ - initBearingPoint;
+            // console.log('bearingPoint:', bearingPoint);
 
             let shiftScale_ = (distance_ / initDistance);
 
-            map.getSource('uploaded-source').setData(turf.transformScale(shiftPlan, shiftScale_, { 'origin': center_.geometry.coordinates }));
-            map.getSource('oid-bbox').setData(turf.transformScale(shiftBboxPlan, shiftScale_, { 'origin': center_.geometry.coordinates }));
+            // map.getSource('uploaded-source').setData(turf.transformScale(shiftPlan, shiftScale_, { 'origin': center_.geometry.coordinates }));
+            let shiftBboxPlan_ = turf.transformScale(shiftBboxPlan, shiftScale_, { 'origin': center_.geometry.coordinates });
+            shiftBboxPlan_ = turf.transformRotate(shiftBboxPlan_, bearingPoint, { pivot: center_.geometry.coordinates })
+            map.getSource('oid-bbox').setData(shiftBboxPlan_);
+            // map.getSource('uploaded-source').setData(turf.transformRotate(shiftPlan, map.getBearing(), { pivot: center_.geometry.coordinates }));
 
             // Update the Point feature in `geojson` coordinates
             // and call setData to the source layer `point` on it.
@@ -688,12 +860,19 @@
             let point_ = scalingPoint.features[0];
             let distance_ = turf.distance(center_, point_);
             shiftScale = (distance_ / bboxDistance);
+            shiftBearing = shiftBearing + bearingPoint;
+
             displayShift(shiftBearing, shiftScale, shiftPos)
             updateShift();
             initDistance = null;
+            initBearingPoint = null;
             // Unbind mouse/touch events
             map.off('mousemove', onMovePoint);
             map.off('touchmove', onMovePoint);
+
+            map.getSource('nearest').setData(EMPTY_GEOJSON);
+
+            isMoving = false;
         }
 
         map.on('load', function () {
