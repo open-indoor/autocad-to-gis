@@ -1,0 +1,16 @@
+{
+    "arrow_move_64": {
+        "height": 128,
+        "pixelRatio": 1,
+        "width": 128,
+        "x": 0,
+        "y": 0
+    },
+    "arrow_turn_64": {
+        "height": 128,
+        "pixelRatio": 2,
+        "width": 128,
+        "x": 128,
+        "y": 0
+    }
+}

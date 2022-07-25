@@ -205,6 +205,7 @@
                 "center": [0, 0],
                 "zoom": 0,
                 "glyphs": "https://openmaptiles.openindoor.io/fonts/{fontstack}/{range}.pbf",
+                "sprite": "https://autocad-to-geojson.openindoor.io/sprite/sprite",
                 "sources": {
                     "raster-tiles": {
                         "type": "raster",
@@ -386,10 +387,20 @@
                     'circle-color': '#F00'
                 }
             });
+            // map.addLayer({
+            //     'id': 'rot-center',
+            //     'type': 'symbol',
+            //     'source': 'rot-center',
+            //     'layout': {
+            //         'icon-image': 'arrow_move_64'
+            //     }
+            // });
             // When the cursor enters a feature in the point layer, prepare for dragging.
             map.on('mouseenter', 'point', function () {
                 map.setPaintProperty('point', 'circle-color', '#3bb2d0');
-                canvas.style.cursor = 'move';
+                // canvas.style.cursor = 'all-scroll';
+                canvas.style.cursor = "url('img/arrow-around.png') 32 32, auto";
+
             });
 
             map.on('mouseleave', 'point', function () {
@@ -401,7 +412,7 @@
                 // Prevent the default map drag behavior.
                 e.preventDefault();
 
-                canvas.style.cursor = 'grab';
+                canvas.style.cursor = "url('img/arrow-around.png') 32 32, auto";
 
                 map.on('mousemove', onMovePoint);
                 map.once('mouseup', onMoveUpPoint);
@@ -417,11 +428,21 @@
                 map.once('touchend', onMoveUpPoint);
             });
 
+
+            map.on('mouseover', 'rot-center', function () {
+                canvas.style.cursor = "url('img/crosshair.png') 32 32, auto";
+                // canvas.style.cursor = 'move';
+            });
+
+            map.on('mouseleave', 'rot-center', function () {
+                canvas.style.cursor = '';
+            });
+
             map.on('mousedown', 'rot-center', function (e) {
                 // Prevent the default map drag behavior.
                 e.preventDefault();
 
-                canvas.style.cursor = 'grab';
+                canvas.style.cursor = "url('img/crosshair.png') 32 32, auto";
                 currentLayerID = 'rot-center';
 
                 map.on('mousemove', onMove);
@@ -558,7 +579,7 @@
                             continue;
                         let layerId_ = layerID + '-' + subLayer;
                         map.on('mouseenter', layerId_, function (e) {
-                            canvas.style.cursor = 'move';
+                            // canvas.style.cursor = 'move';
                             map.setPaintProperty(layerId_, layers[layerID][subLayer].colorType, '#00F')
 
                             if (!isMoving) {
@@ -573,65 +594,11 @@
                         });
 
                         map.on('mouseleave', layerId_, function () {
-                            canvas.style.cursor = '';
+                            // canvas.style.cursor = '';
                             map.setPaintProperty(layerId_, layers[layerID][subLayer].colorType, '#888888');
                             // map.getSource('nearest').setData(EMPTY_GEOJSON);
                         });
-                        // map.on('click', layerId_, function (e) {
-                        //     e.preventDefault();
-                        //     let features = map.queryRenderedFeatures();
-                        //     let points = turf.explode(features);
-                        //     console.log('points:', points)
-                        //     // let targetPoint = turf.point([e.lngLat.lng, e.lngLat.lat]);
-                        //     // nearest = turf.nearestPoint(targetPoint, points);
-                        //     // map.getSource('nearest').setData(nearest);
-
-
-
-                        //     // let points = turf.explode(features_[0]);
-                        //     // let targetPoint = turf.point([e.lngLat.lng, e.lngLat.lat]);
-                        //     // rotCenterPoint = turf.nearestPoint(targetPoint, points);
-                        //     // initRotCenterPoint = turf.clone(rotCenterPoint);
-                        //     // rotCenter = maplibregl.LngLat.convert(turf.getCoord(rotCenterPoint));
-                        //     // initRotCenter = rotCenter;
-
-                        //     // console.log('initRotCenter:', initRotCenter)
-                        //     // map.getSource('rot-center').setData(initRotCenterPoint);
-                        //     // map.setLayoutProperty('point', 'visibility', 'visible');
-                        // })
-                        // map.on('mousedown', layerId_, function (e) {
-                        //     console.log('rotCenterPoint:', rotCenterPoint)
-                        //     if (rotCenterPoint == null)
-                        //         return;
-                        //     currentLayerID = layerID;
-                        //     e.preventDefault();
-
-                        //     canvas.style.cursor = 'grab';
-
-                        //     map.on('mousemove', onMove);
-                        //     map.once('mouseup', onMoveUp);
-                        // });
-
-                        // map.on('touchstart', layerId_, function (e) {
-                        //     currentLayerID = layerID;
-                        //     if (e.points.length !== 1) return;
-
-                        //     // Prevent the default map drag behavior.
-                        //     e.preventDefault();
-
-                        //     map.on('touchmove', onMove);
-                        //     map.once('touchend', onMoveUp);
-                        // });
                     }
-                    // map.on('rotatestart', function (e) {
-                    //     if (map.dragRotate.isActive() || map.touchZoomRotate.isActive()) {
-                    //         console.log('rotatestart');
-                    //         map.on('rotate', onRotate);
-                    //         map.once('rotateend', onRotateEnd);
-                    //     }
-                    // });
-
-
                 }
             })
         }
@@ -730,7 +697,7 @@
                 '<li>Longitude: ' + (shiftPos_.pos.lng - shiftPos_.initPos.lng) + '</li>' +
                 '<li>Latitude: ' + (shiftPos_.pos.lat - shiftPos_.initPos.lat) + '</li>' +
                 '</ul>';
-            canvas.style.cursor = '';
+            // canvas.style.cursor = '';
         }
 
         function updateShift() {
@@ -820,7 +787,9 @@
             // console.log('rotCenter:', rotCenter);
 
             // Set a UI indicator for dragging.
-            canvas.style.cursor = 'grabbing';
+            // canvas.style.cursor = 'grabbing';
+            canvas.style.cursor = "url('img/crosshair.png') 32 32, auto";
+
 
             // let pos = {
             //     lng: newPos.lng - initPos.lng,
@@ -890,7 +859,8 @@
         function onMovePoint(e) {
             isMoving = true;
             // Set a UI indicator for dragging.
-            canvas.style.cursor = 'grabbing';
+            // canvas.style.cursor = 'grabbing';
+            canvas.style.cursor = "url('img/arrow-around.png') 32 32, auto";
 
             var coords = e.lngLat;
             scalingPoint.geometry.coordinates = coords.toArray();
